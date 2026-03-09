@@ -1,586 +1,491 @@
 import { useState } from "react";
 
-const PINK = "#FF69B4";
-const PINK_DARK = "#c2185b";
-const NAVY = "#1F4E79";
-const NAVY_LIGHT = "#2E74B5";
-const WHITE = "#FFFFFF";
-const GRAY = "#B0B8C1";
-const GRAY_LIGHT = "#ECF0F3";
-const GREEN = "#27AE60";
-const RED = "#E74C3C";
-const YELLOW = "#F6C90E";
+const PINK       = "#FF69B4";
+const PINK_DARK  = "#c2185b";
+const NAVY       = "#1F4E79";
+const WHITE      = "#FFFFFF";
+const GRAY_NODE  = "#D8E4EF";
+const GRAY_EDGE  = "#9DAFC0";
+const GRAY_TEXT  = "#3A5068";
+const GREEN      = "#27AE60";
+const RED        = "#E74C3C";
+const YELLOW     = "#F6C90E";
+const BG_DIAG    = "#F4F8FC";
 
-// ── Shared SVG primitives ─────────────────────────────────────
+// ── Multi-line centered text ──────────────────────────────────
+function MText({ x, y, lines, active, size = 11 }) {
+  const lh = size * 1.45;
+  const startY = y - ((lines.length - 1) * lh) / 2;
+  return (
+    <>
+      {lines.map((l, i) => (
+        <text key={i} x={x} y={startY + i * lh}
+          textAnchor="middle" dominantBaseline="middle"
+          fontSize={size} fontFamily="'Courier New', monospace"
+          fontWeight={active ? "700" : "500"}
+          fill={active ? WHITE : GRAY_TEXT}>{l}</text>
+      ))}
+    </>
+  );
+}
 
-function Oval({ x, y, w = 90, h = 34, label, active }) {
+function Oval({ x, y, w = 84, h = 32, lines, active }) {
   return (
     <g>
-      <ellipse cx={x} cy={y} rx={w / 2} ry={h / 2}
-        fill={active ? PINK : GRAY_LIGHT}
+      <ellipse cx={x} cy={y} rx={w/2} ry={h/2}
+        fill={active ? PINK : GRAY_NODE}
         stroke={active ? PINK_DARK : NAVY}
         strokeWidth={active ? 2.5 : 1.5} />
-      <text x={x} y={y + 1} textAnchor="middle" dominantBaseline="middle"
-        fontSize={12} fontFamily="'Courier New', monospace"
-        fontWeight={active ? "700" : "500"}
-        fill={active ? WHITE : NAVY}>{label}</text>
+      <MText x={x} y={y} lines={lines} active={active} size={13} />
     </g>
   );
 }
 
-function Rect({ x, y, w = 130, h = 40, label, active, sub }) {
+function Box({ x, y, w, h, lines, active }) {
   return (
     <g>
-      <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={4}
-        fill={active ? PINK : GRAY_LIGHT}
+      <rect x={x-w/2} y={y-h/2} width={w} height={h} rx={5}
+        fill={active ? PINK : GRAY_NODE}
         stroke={active ? PINK_DARK : NAVY}
         strokeWidth={active ? 2.5 : 1.5} />
-      <text x={x} y={sub ? y - 5 : y + 1} textAnchor="middle" dominantBaseline="middle"
-        fontSize={11} fontFamily="'Courier New', monospace"
-        fontWeight={active ? "700" : "500"}
-        fill={active ? WHITE : NAVY}>{label}</text>
-      {sub && <text x={x} y={y + 10} textAnchor="middle" dominantBaseline="middle"
-        fontSize={10} fontFamily="'Courier New', monospace"
-        fill={active ? WHITE : "#555"}>{sub}</text>}
+      <MText x={x} y={y} lines={lines} active={active} size={11} />
     </g>
   );
 }
 
-function Diamond({ x, y, size = 44, label, active }) {
-  const pts = `${x},${y - size} ${x + size * 1.4},${y} ${x},${y + size} ${x - size * 1.4},${y}`;
+function Diamond({ x, y, hw, hh, lines, active }) {
+  const pts = `${x},${y-hh} ${x+hw},${y} ${x},${y+hh} ${x-hw},${y}`;
   return (
     <g>
       <polygon points={pts}
-        fill={active ? PINK : GRAY_LIGHT}
+        fill={active ? PINK : GRAY_NODE}
         stroke={active ? PINK_DARK : NAVY}
         strokeWidth={active ? 2.5 : 1.5} />
-      <text x={x} y={y + 1} textAnchor="middle" dominantBaseline="middle"
-        fontSize={11} fontFamily="'Courier New', monospace"
-        fontWeight={active ? "700" : "500"}
-        fill={active ? WHITE : NAVY}>{label}</text>
+      <MText x={x} y={y} lines={lines} active={active} size={11} />
     </g>
   );
 }
 
-function Arrow({ x1, y1, x2, y2, label, active, labelPos }) {
-  const color = active ? PINK_DARK : GRAY;
-  const sw = active ? 2.5 : 1.5;
-  // arrowhead
-  const angle = Math.atan2(y2 - y1, x2 - x1);
-  const al = 10;
-  const ax1 = x2 - al * Math.cos(angle - 0.4);
-  const ay1 = y2 - al * Math.sin(angle - 0.4);
-  const ax2 = x2 - al * Math.cos(angle + 0.4);
-  const ay2 = y2 - al * Math.sin(angle + 0.4);
-  const lx = labelPos ? labelPos.x : (x1 + x2) / 2 + 4;
-  const ly = labelPos ? labelPos.y : (y1 + y2) / 2 - 6;
+function arrowHead(x2, y2, angle, color) {
+  const al = 9;
+  const p1x = x2 - al * Math.cos(angle - 0.38);
+  const p1y = y2 - al * Math.sin(angle - 0.38);
+  const p2x = x2 - al * Math.cos(angle + 0.38);
+  const p2y = y2 - al * Math.sin(angle + 0.38);
+  return <polygon points={`${x2},${y2} ${p1x},${p1y} ${p2x},${p2y}`} fill={color} />;
+}
+
+function Arrow({ x1, y1, x2, y2, label, active, lx, ly }) {
+  const color = active ? PINK_DARK : GRAY_EDGE;
+  const angle = Math.atan2(y2-y1, x2-x1);
+  const tlx = lx !== undefined ? lx : (x1+x2)/2;
+  const tly = ly !== undefined ? ly : (y1+y2)/2 - 9;
   return (
     <g>
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={sw} />
-      <polygon points={`${x2},${y2} ${ax1},${ay1} ${ax2},${ay2}`} fill={color} />
-      {label && <text x={lx} y={ly} textAnchor="middle" fontSize={10}
-        fontFamily="'Courier New', monospace" fill={active ? PINK_DARK : "#666"}
-        fontWeight={active ? "700" : "400"}>{label}</text>}
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={active?2.5:1.5} />
+      {arrowHead(x2, y2, angle, color)}
+      {label && <text x={tlx} y={tly} textAnchor="middle" fontSize={11}
+        fontFamily="'Courier New', monospace"
+        fontWeight={active?"700":"400"}
+        fill={active ? PINK_DARK : "#607A90"}>{label}</text>}
     </g>
   );
 }
 
-// ── Individual diagrams ───────────────────────────────────────
-
-// prestarLibro – Normal (libro disponible → true)
-function DiagPrestarNormal() {
+// Right-then-down elbow: (x1,y1) → right to cornerX → down to (cornerX, y2)
+function ElbowRD({ x1, y1, cornerX, y2, label, active, lx, ly }) {
+  const color = active ? PINK_DARK : GRAY_EDGE;
+  const sw    = active ? 2.5 : 1.5;
+  const tlx = lx !== undefined ? lx : cornerX;
+  const tly = ly !== undefined ? ly : y1 - 9;
   return (
-    <svg width="260" height="380" viewBox="0 0 260 380">
-      <Oval x={130} y={30} label="Inicio" active />
-      <Arrow x1={130} y1={47} x2={130} y2={90} active />
-      <Rect x={130} y={110} w={170} h={38} label="prestado = false" active />
-      <Arrow x1={130} y1={129} x2={130} y2={168} active />
-      <Diamond x={130} y={195} size={36} label="!prestado?" active />
-      <Arrow x1={130} y1={231} x2={130} y2={268} label="true" active labelPos={{x:145,y:252}} />
-      <Rect x={130} y={290} w={160} h={38} label="prestado = true" active />
-      <Arrow x1={130} y1={309} x2={130} y2={345} active />
-      <Rect x={130} y={358} w={130} h={28} label="return true" active />
-      {/* false branch — inactive */}
-      <Arrow x1={191} y1={195} x2={230} y2={195} label="false" active={false} labelPos={{x:215,y:185}} />
-      <Rect x={230} y={230} w={50} h={28} label="ret false" active={false} />
-      <Arrow x1={191} y1={195} x2={230} y2={215} active={false} />
+    <g>
+      <polyline points={`${x1},${y1} ${cornerX},${y1} ${cornerX},${y2}`}
+        fill="none" stroke={color} strokeWidth={sw} />
+      {arrowHead(cornerX, y2, Math.PI/2, color)}
+      {label && <text x={tlx} y={tly} textAnchor="middle" fontSize={11}
+        fontFamily="'Courier New', monospace"
+        fontWeight={active?"700":"400"}
+        fill={active ? PINK_DARK : "#607A90"}>{label}</text>}
+    </g>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DIAGRAMS
+// ══════════════════════════════════════════════════════════════
+
+/* prestarLibro
+   ◇ !prestado?
+     true  ↓  → Box: prestado=true / return true → Fin
+     false →  → Box: (sin cambio) / return false → Fin
+*/
+function DiagPrestar({ activeTrue: aT }) {
+  const cx = 180; // center x for main column
+  const rx = 370; // right column x
+  return (
+    <svg width="490" height="560" viewBox="0 0 490 560">
+      <Oval x={cx} y={44} lines={["Inicio"]} active />
+      <Arrow x1={cx} y1={60} x2={cx} y2={96} active />
+
+      <Box x={cx} y={124} w={220} h={46}
+        lines={[`prestado = ${aT?"false":"true"}`]} active />
+      <Arrow x1={cx} y1={147} x2={cx} y2={183} active />
+
+      <Diamond x={cx} y={224} hw={90} hh={42}
+        lines={["!prestado?"]} active />
+
+      {/* TRUE branch – down */}
+      <Arrow x1={cx} y1={266} x2={cx} y2={318}
+        label="true" active={aT} lx={cx+20} ly={294} />
+      <Box x={cx} y={350} w={230} h={52}
+        lines={["prestado = true","return true"]} active={aT} />
+      <Arrow x1={cx} y1={376} x2={cx} y2={420} active={aT} />
+      <Oval x={cx} y={444} lines={["Fin"]} active={aT} />
+
+      {/* FALSE branch – right elbow */}
+      <ElbowRD x1={cx+90} y1={224} cornerX={rx} y2={318}
+        label="false" active={!aT} lx={rx+8} ly={210} />
+      <Box x={rx} y={350} w={210} h={52}
+        lines={["(sin cambio)","return false"]} active={!aT} />
+      <Arrow x1={rx} y1={376} x2={rx} y2={420} active={!aT} />
+      <Oval x={rx} y={444} lines={["Fin"]} active={!aT} />
     </svg>
   );
 }
 
-// prestarLibro – Alternativo (libro ya prestado → false)
-function DiagPrestarAlt() {
+/* reservarLibro
+   ◇ !reservado && prestado==true?
+     true  ↓  → reservado=true / return true → Fin
+     false →  → (sin cambio)  / return false → Fin
+*/
+function DiagReservar({ activeTrue: aT }) {
+  const cx = 190;
+  const rx = 390;
   return (
-    <svg width="300" height={380} viewBox="0 0 300 380">
-      <Oval x={130} y={30} label="Inicio" active />
-      <Arrow x1={130} y1={47} x2={130} y2={90} active />
-      <Rect x={130} y={110} w={170} h={38} label="prestado = true" active />
-      <Arrow x1={130} y1={129} x2={130} y2={168} active />
-      <Diamond x={130} y={195} size={36} label="!prestado?" active />
-      {/* true branch — inactive */}
-      <Arrow x1={130} y1={231} x2={130} y2={268} label="true" active={false} labelPos={{x:148,y:252}} />
-      <Rect x={130} y={290} w={150} h={38} label="prestado=true" active={false} />
-      {/* false branch — active */}
-      <Arrow x1={191} y1={195} x2={245} y2={195} label="false" active labelPos={{x:222,y:184}} />
-      <Arrow x1={245} y1={195} x2={245} y2={290} active />
-      <Rect x={245} y={310} w={90} h={38} label="return false" active />
-      <Arrow x1={245} y1={329} x2={245} y2={358} active />
-      <Oval x={245} y={368} label="Fin" active />
+    <svg width="510" height="590" viewBox="0 0 510 590">
+      <Oval x={cx} y={44} lines={["Inicio"]} active />
+      <Arrow x1={cx} y1={60} x2={cx} y2={96} active />
+
+      <Box x={cx} y={132} w={255} h={54}
+        lines={[
+          `prestado = ${aT?"true":"false"}`,
+          "reservado = false",
+        ]} active />
+      <Arrow x1={cx} y1={159} x2={cx} y2={197} active />
+
+      <Diamond x={cx} y={248} hw={115} hh={50}
+        lines={["!reservado &&","prestado==true?"]} active />
+
+      {/* TRUE */}
+      <Arrow x1={cx} y1={298} x2={cx} y2={352}
+        label="true" active={aT} lx={cx+20} ly={327} />
+      <Box x={cx} y={386} w={240} h={52}
+        lines={["reservado = true","return true"]} active={aT} />
+      <Arrow x1={cx} y1={412} x2={cx} y2={456} active={aT} />
+      <Oval x={cx} y={480} lines={["Fin"]} active={aT} />
+
+      {/* FALSE */}
+      <ElbowRD x1={cx+115} y1={248} cornerX={rx} y2={352}
+        label="false" active={!aT} lx={rx+8} ly={234} />
+      <Box x={rx} y={386} w={210} h={52}
+        lines={["(sin cambio)","return false"]} active={!aT} />
+      <Arrow x1={rx} y1={412} x2={rx} y2={456} active={!aT} />
+      <Oval x={rx} y={480} lines={["Fin"]} active={!aT} />
     </svg>
   );
 }
 
-// reservarLibro – Normal (prestado=true, reservado=false → true)
-function DiagReservarNormal() {
+/* devolverLibro
+   ◇ ¿Existen libros prestados?
+     Sí  ↓  → seleccionar → devolverLibro() → prestado=false → println → Fin
+     No  →  → mensaje informativo → menú principal → Fin
+*/
+function DiagDevolver({ activeTrue: aT }) {
+  const cx = 200;
+  const rx = 400;
   return (
-    <svg width="320" height={430} viewBox="0 0 320 430">
-      <Oval x={160} y={30} label="Inicio" active />
-      <Arrow x1={160} y1={47} x2={160} y2={85} active />
-      <Rect x={160} y={108} w={200} h={42} label="prestado=true" sub="reservado=false" active />
-      <Arrow x1={160} y1={129} x2={160} y2={170} active />
-      <Diamond x={160} y={200} size={40} label="!reservado &&" active />
-      <text x={160} y={202} textAnchor="middle" fontSize={10} fontFamily="monospace" fill={WHITE}>prestado?</text>
-      <Arrow x1={160} y1={240} x2={160} y2={278} label="true" active labelPos={{x:176,y:261}} />
-      <Rect x={160} y={300} w={170} h={38} label="reservado = true" active />
-      <Arrow x1={160} y1={319} x2={160} y2={355} active />
-      <Rect x={160} y={375} w={130} h={30} label="return true" active />
-      {/* false → inactive */}
-      <Arrow x1={216} y1={200} x2={270} y2={200} label="false" active={false} labelPos={{x:247,y:189}} />
-      <Rect x={270} y={235} w={90} h={30} label="ret false" active={false} />
+    <svg width="540" height="620" viewBox="0 0 540 620">
+      <Oval x={cx} y={44} lines={["Inicio"]} active />
+      <Arrow x1={cx} y1={60} x2={cx} y2={96} active />
+
+      <Diamond x={cx} y={148} hw={120} hh={50}
+        lines={["¿Existen libros","prestados?"]} active />
+
+      {/* TRUE (Sí) */}
+      <Arrow x1={cx} y1={198} x2={cx} y2={248}
+        label="Sí" active={aT} lx={cx+18} ly={224} />
+      <Box x={cx} y={278} w={240} h={46}
+        lines={["Seleccionar libro"]} active={aT} />
+      <Arrow x1={cx} y1={301} x2={cx} y2={340} active={aT} />
+      <Box x={cx} y={372} w={255} h={52}
+        lines={["devolverLibro()","prestado = false"]} active={aT} />
+      <Arrow x1={cx} y1={398} x2={cx} y2={438} active={aT} />
+      <Box x={cx} y={468} w={255} h={52}
+        lines={['println: "estado', 'a disponible"']} active={aT} />
+      <Arrow x1={cx} y1={494} x2={cx} y2={540} active={aT} />
+      <Oval x={cx} y={562} lines={["Fin"]} active={aT} />
+
+      {/* FALSE (No) */}
+      <ElbowRD x1={cx+120} y1={148} cornerX={rx} y2={248}
+        label="No" active={!aT} lx={rx+8} ly={134} />
+      <Box x={rx} y={278} w={200} h={52}
+        lines={['"No hay libros',  'en préstamo"']} active={!aT} />
+      <Arrow x1={rx} y1={304} x2={rx} y2={352} active={!aT} />
+      <Box x={rx} y={382} w={190} h={46}
+        lines={["→ Menú principal"]} active={!aT} />
+      <Arrow x1={rx} y1={405} x2={rx} y2={452} active={!aT} />
+      <Oval x={rx} y={474} lines={["Fin"]} active={!aT} />
     </svg>
   );
 }
 
-// reservarLibro – Alternativo (prestado=false → false)
-function DiagReservarAlt() {
+/* setIsbn
+   ◇ isbn!=null && matches(\d{13})?
+     true  ↓  → this.isbn = isbn → Fin
+     false →  → isbn sin cambio  → Fin
+*/
+function DiagIsbn({ activeTrue: aT }) {
+  const cx = 190;
+  const rx = 390;
   return (
-    <svg width="320" height={400} viewBox="0 0 320 400">
-      <Oval x={140} y={30} label="Inicio" active />
-      <Arrow x1={140} y1={47} x2={140} y2={85} active />
-      <Rect x={140} y={108} w={200} h={42} label="prestado=false" sub="reservado=false" active />
-      <Arrow x1={140} y1={129} x2={140} y2={168} active />
-      <Diamond x={140} y={198} size={40} label="!reservado &&" active />
-      <text x={140} y={200} textAnchor="middle" fontSize={10} fontFamily="monospace" fill={WHITE}>prestado?</text>
-      {/* true branch inactive */}
-      <Arrow x1={140} y1={238} x2={140} y2={275} label="true" active={false} labelPos={{x:156,y:258}} />
-      <Rect x={140} y={297} w={160} h={36} label="reservado=true" active={false} />
-      {/* false branch active */}
-      <Arrow x1={196} y1={198} x2={258} y2={198} label="false" active labelPos={{x:232,y:187}} />
-      <Arrow x1={258} y1={198} x2={258} y2={295} active />
-      <Rect x={258} y={315} w={90} h={36} label="return false" active />
-      <Arrow x1={258} y1={333} x2={258} y2={365} active />
-      <Oval x={258} y={378} label="Fin" active />
+    <svg width="510" height="560" viewBox="0 0 510 560">
+      <Oval x={cx} y={44} lines={["Inicio"]} active />
+      <Arrow x1={cx} y1={60} x2={cx} y2={96} active />
+
+      <Box x={cx} y={132} w={265} h={54}
+        lines={[
+          aT ? 'isbn="9780134685991"' : 'isbn="123ABC"',
+          "(valor ingresado)",
+        ]} active />
+      <Arrow x1={cx} y1={159} x2={cx} y2={197} active />
+
+      <Diamond x={cx} y={252} hw={120} hh={54}
+        lines={['isbn!=null &&', 'matches("\\d{13}")?']} active />
+
+      {/* TRUE */}
+      <Arrow x1={cx} y1={306} x2={cx} y2={358}
+        label="true" active={aT} lx={cx+20} ly={334} />
+      <Box x={cx} y={390} w={250} h={52}
+        lines={["this.isbn = isbn","(ISBN actualizado)"]} active={aT} />
+      <Arrow x1={cx} y1={416} x2={cx} y2={460} active={aT} />
+      <Oval x={cx} y={482} lines={["Fin"]} active={aT} />
+
+      {/* FALSE */}
+      <ElbowRD x1={cx+120} y1={252} cornerX={rx} y2={358}
+        label="false" active={!aT} lx={rx+8} ly={238} />
+      <Box x={rx} y={390} w={195} h={52}
+        lines={["isbn sin cambio","(valor previo)"]} active={!aT} />
+      <Arrow x1={rx} y1={416} x2={rx} y2={460} active={!aT} />
+      <Oval x={rx} y={482} lines={["Fin"]} active={!aT} />
     </svg>
   );
 }
 
-// devolverLibro – Normal
-function DiagDevolverNormal() {
+/* setPaginas
+   ◇ numPaginas > 0?
+     true  ↓  → this.numPaginas = num → Fin
+     false →  → sin cambio           → Fin
+*/
+function DiagPaginas({ activeTrue: aT }) {
+  const cx = 185;
+  const rx = 380;
   return (
-    <svg width="260" height={370} viewBox="0 0 260 370">
-      <Oval x={130} y={30} label="Inicio" active />
-      <Arrow x1={130} y1={47} x2={130} y2={85} active />
-      <Rect x={130} y={108} w={165} h={38} label="prestado = true" active />
-      <Arrow x1={130} y1={127} x2={130} y2={163} active />
-      <Rect x={130} y={186} w={200} h={42} label={`println: "Cambiando`} sub={`estado a disponible"`} active />
-      <Arrow x1={130} y1={207} x2={130} y2={248} active />
-      <Rect x={130} y={270} w={165} h={38} label="prestado = false" active />
-      <Arrow x1={130} y1={289} x2={130} y2={328} active />
-      <Oval x={130} y={345} label="Fin" active />
+    <svg width="500" height="540" viewBox="0 0 500 540">
+      <Oval x={cx} y={44} lines={["Inicio"]} active />
+      <Arrow x1={cx} y1={60} x2={cx} y2={96} active />
+
+      <Box x={cx} y={132} w={250} h={54}
+        lines={[
+          `numPaginas = ${aT?"320":"0"}`,
+          "(valor ingresado)",
+        ]} active />
+      <Arrow x1={cx} y1={159} x2={cx} y2={197} active />
+
+      <Diamond x={cx} y={246} hw={105} hh={48}
+        lines={["numPaginas > 0?"]} active />
+
+      {/* TRUE */}
+      <Arrow x1={cx} y1={294} x2={cx} y2={346}
+        label="true" active={aT} lx={cx+22} ly={322} />
+      <Box x={cx} y={378} w={255} h={52}
+        lines={["this.numPaginas =","numPaginas"]} active={aT} />
+      <Arrow x1={cx} y1={404} x2={cx} y2={448} active={aT} />
+      <Oval x={cx} y={470} lines={["Fin"]} active={aT} />
+
+      {/* FALSE */}
+      <ElbowRD x1={cx+105} y1={246} cornerX={rx} y2={346}
+        label="false" active={!aT} lx={rx+8} ly={232} />
+      <Box x={rx} y={378} w={195} h={52}
+        lines={["numPaginas sin","cambio (prev.)"]} active={!aT} />
+      <Arrow x1={rx} y1={404} x2={rx} y2={448} active={!aT} />
+      <Oval x={rx} y={470} lines={["Fin"]} active={!aT} />
     </svg>
   );
 }
 
-// devolverLibro – Alternativo (no hay libros prestados)
-function DiagDevolverAlt() {
-  return (
-    <svg width="300" height={400} viewBox="0 0 300 400">
-      <Oval x={150} y={30} label="Inicio" active />
-      <Arrow x1={150} y1={47} x2={150} y2={85} active />
-      <Diamond x={150} y={118} size={40} label="¿Libros" active />
-      <text x={150} y={120} textAnchor="middle" fontSize={10} fontFamily="monospace" fill={WHITE}>prestados?</text>
-      {/* SÍ branch — inactive */}
-      <Arrow x1={150} y1={158} x2={150} y2={195} label="Sí" active={false} labelPos={{x:163,y:178}} />
-      <Rect x={150} y={218} w={165} h={38} label="devolverLibro()" active={false} />
-      {/* NO branch — active */}
-      <Arrow x1={206} y1={118} x2={262} y2={118} label="No" active labelPos={{x:238,y:107}} />
-      <Arrow x1={262} y1={118} x2={262} y2={210} active />
-      <Rect x={262} y={232} w={120} h={42} label={`"No hay libros`} sub={`en préstamo"`} active />
-      <Arrow x1={262} y1={253} x2={262} y2={300} active />
-      <Rect x={262} y={320} w={130} h={36} label="→ Menú principal" active />
-      <Arrow x1={262} y1={338} x2={262} y2={370} active />
-      <Oval x={262} y={383} label="Fin" active />
-    </svg>
-  );
-}
-
-// setIsbn – Normal
-function DiagIsbnNormal() {
-  return (
-    <svg width="270" height={390} viewBox="0 0 270 390">
-      <Oval x={135} y={30} label="Inicio" active />
-      <Arrow x1={135} y1={47} x2={135} y2={85} active />
-      <Rect x={135} y={108} w={200} h={38} label={`isbn = "9780134685991"`} active />
-      <Arrow x1={135} y1={127} x2={135} y2={163} active />
-      <Diamond x={135} y={196} size={40} label="isbn != null &&" active />
-      <text x={135} y={198} textAnchor="middle" fontSize={10} fontFamily="monospace" fill={WHITE}>matches(\\d{13})?</text>
-      <Arrow x1={135} y1={236} x2={135} y2={273} label="true" active labelPos={{x:151,y:256}} />
-      <Rect x={135} y={296} w={190} h={38} label="this.isbn = isbn" active />
-      <Arrow x1={135} y1={315} x2={135} y2={353} active />
-      <Oval x={135} y={368} label="Fin" active />
-      {/* false branch inactive */}
-      <Arrow x1={191} y1={196} x2={245} y2={196} label="false" active={false} labelPos={{x:222,y:185}} />
-      <Rect x={245} y={228} w={80} h={30} label="sin cambio" active={false} />
-    </svg>
-  );
-}
-
-// setIsbn – Alternativo
-function DiagIsbnAlt() {
-  return (
-    <svg width="310" height={380} viewBox="0 0 310 380">
-      <Oval x={130} y={30} label="Inicio" active />
-      <Arrow x1={130} y1={47} x2={130} y2={85} active />
-      <Rect x={130} y={108} w={175} h={38} label={`isbn = "123ABC"`} active />
-      <Arrow x1={130} y1={127} x2={130} y2={165} active />
-      <Diamond x={130} y={198} size={40} label="isbn != null &&" active />
-      <text x={130} y={200} textAnchor="middle" fontSize={10} fontFamily="monospace" fill={WHITE}>matches(\\d{13})?</text>
-      {/* true branch inactive */}
-      <Arrow x1={130} y1={238} x2={130} y2={275} label="true" active={false} labelPos={{x:146,y:258}} />
-      <Rect x={130} y={297} w={175} h={36} label="this.isbn = isbn" active={false} />
-      {/* false branch active */}
-      <Arrow x1={186} y1={198} x2={252} y2={198} label="false" active labelPos={{x:224,y:187}} />
-      <Arrow x1={252} y1={198} x2={252} y2={293} active />
-      <Rect x={252} y={313} w={110} h={38} label="isbn sin cambio" active />
-      <Arrow x1={252} y1={332} x2={252} y2={358} active />
-      <Oval x={252} y={370} label="Fin" active />
-    </svg>
-  );
-}
-
-// setPaginas – Normal
-function DiagPaginasNormal() {
-  return (
-    <svg width="270" height={380} viewBox="0 0 270 380">
-      <Oval x={135} y={30} label="Inicio" active />
-      <Arrow x1={135} y1={47} x2={135} y2={85} active />
-      <Rect x={135} y={108} w={175} h={38} label="numPaginas = 320" active />
-      <Arrow x1={135} y1={127} x2={135} y2={165} active />
-      <Diamond x={135} y={198} size={38} label="numPaginas > 0?" active />
-      <Arrow x1={135} y1={236} x2={135} y2={273} label="true" active labelPos={{x:151,y:256}} />
-      <Rect x={135} y={296} w={200} h={38} label="this.numPaginas = 320" active />
-      <Arrow x1={135} y1={315} x2={135} y2={352} active />
-      <Oval x={135} y={368} label="Fin" active />
-      {/* false inactive */}
-      <Arrow x1={189} y1={198} x2={240} y2={198} label="false" active={false} labelPos={{x:219,y:187}} />
-      <Rect x={240} y={228} w={80} h={30} label="sin cambio" active={false} />
-    </svg>
-  );
-}
-
-// setPaginas – Alternativo
-function DiagPaginasAlt() {
-  return (
-    <svg width="310" height={370} viewBox="0 0 310 370">
-      <Oval x={130} y={30} label="Inicio" active />
-      <Arrow x1={130} y1={47} x2={130} y2={85} active />
-      <Rect x={130} y={108} w={165} h={38} label="numPaginas = 0" active />
-      <Arrow x1={130} y1={127} x2={130} y2={165} active />
-      <Diamond x={130} y={198} size={38} label="numPaginas > 0?" active />
-      {/* true inactive */}
-      <Arrow x1={130} y1={236} x2={130} y2={273} label="true" active={false} labelPos={{x:148,y:256}} />
-      <Rect x={130} y={297} w={190} h={36} label="this.numPaginas = 0" active={false} />
-      {/* false active */}
-      <Arrow x1={184} y1={198} x2={252} y2={198} label="false" active labelPos={{x:223,y:187}} />
-      <Arrow x1={252} y1={198} x2={252} y2={293} active />
-      <Rect x={252} y={313} w={120} h={38} label="numPaginas sin\ncambio (=320)" active />
-      <Arrow x1={252} y1={332} x2={252} y2={355} active />
-      <Oval x={252} y={368} label="Fin" active />
-    </svg>
-  );
-}
-
-// ── Case data ─────────────────────────────────────────────────
+// ── Case registry ─────────────────────────────────────────────
 const CASES = [
-  { id: "CP-01", uc: "UC-01", metodo: "prestarLibro()", flujo: "Normal",
-    titulo: "Préstamo: libro disponible",
-    desc: "Condición !prestado evaluada como TRUE → prestado cambia a true, retorna true.",
-    Diagram: DiagPrestarNormal },
-  { id: "CP-02", uc: "UC-01", metodo: "prestarLibro()", flujo: "Alternativo",
-    titulo: "Préstamo: libro ya prestado",
-    desc: "Condición !prestado evaluada como FALSE → no hay cambio, retorna false.",
-    Diagram: DiagPrestarAlt },
-  { id: "CP-03", uc: "UC-02", metodo: "reservarLibro()", flujo: "Normal",
-    titulo: "Reserva: libro prestado sin reserva",
-    desc: "Condición (!reservado && prestado) evaluada como TRUE → reservado = true, retorna true.",
-    Diagram: DiagReservarNormal },
-  { id: "CP-04", uc: "UC-02", metodo: "reservarLibro()", flujo: "Alternativo",
-    titulo: "Reserva: libro no prestado",
-    desc: "Condición (!reservado && prestado) evaluada como FALSE (prestado=false) → retorna false.",
-    Diagram: DiagReservarAlt },
-  { id: "CP-05", uc: "UC-03", metodo: "devolverLibro()", flujo: "Normal",
-    titulo: "Devolución: libro prestado",
-    desc: "Se invoca devolverLibro() → prestado cambia a false, se imprime mensaje de confirmación.",
-    Diagram: DiagDevolverNormal },
-  { id: "CP-06", uc: "UC-03", metodo: "devolverLibro()", flujo: "Alternativo",
-    titulo: "Devolución: sin libros prestados",
-    desc: "No existen libros prestados → el sistema muestra mensaje y regresa al menú sin invocar devolverLibro().",
-    Diagram: DiagDevolverAlt },
-  { id: "CP-07", uc: "UC-04", metodo: "setIsbn()", flujo: "Normal",
-    titulo: "ISBN: valor de 13 dígitos válido",
-    desc: "Condición (isbn != null && matches(\\d{13})) evaluada como TRUE → isbn actualizado.",
-    Diagram: DiagIsbnNormal },
-  { id: "CP-08", uc: "UC-04", metodo: "setIsbn()", flujo: "Alternativo",
-    titulo: "ISBN: formato inválido",
-    desc: "Condición (isbn != null && matches(\\d{13})) evaluada como FALSE → isbn sin cambio.",
-    Diagram: DiagIsbnAlt },
-  { id: "CP-09", uc: "UC-05", metodo: "setPaginas()", flujo: "Normal",
-    titulo: "Páginas: valor positivo (320)",
-    desc: "Condición (numPaginas > 0) evaluada como TRUE → numPaginas actualizado a 320.",
-    Diagram: DiagPaginasNormal },
-  { id: "CP-10", uc: "UC-05", metodo: "setPaginas()", flujo: "Alternativo",
-    titulo: "Páginas: valor cero",
-    desc: "Condición (numPaginas > 0) evaluada como FALSE (valor=0) → numPaginas sin cambio.",
-    Diagram: DiagPaginasAlt },
+  { id:"CP-01", uc:"UC-01", metodo:"prestarLibro()", flujo:"Normal",
+    titulo:"Préstamo: libro disponible",
+    desc:"Condición !prestado evaluada como TRUE → prestado cambia a true, retorna true.",
+    Diagram: () => <DiagPrestar activeTrue={true} /> },
+  { id:"CP-02", uc:"UC-01", metodo:"prestarLibro()", flujo:"Alternativo",
+    titulo:"Préstamo: libro ya prestado",
+    desc:"Condición !prestado evaluada como FALSE → no hay cambio de estado, retorna false.",
+    Diagram: () => <DiagPrestar activeTrue={false} /> },
+  { id:"CP-03", uc:"UC-02", metodo:"reservarLibro()", flujo:"Normal",
+    titulo:"Reserva: libro prestado sin reserva",
+    desc:"Condición (!reservado && prestado) evaluada como TRUE → reservado=true, retorna true.",
+    Diagram: () => <DiagReservar activeTrue={true} /> },
+  { id:"CP-04", uc:"UC-02", metodo:"reservarLibro()", flujo:"Alternativo",
+    titulo:"Reserva: libro no prestado",
+    desc:"Condición (!reservado && prestado) evaluada como FALSE → retorna false.",
+    Diagram: () => <DiagReservar activeTrue={false} /> },
+  { id:"CP-05", uc:"UC-03", metodo:"devolverLibro()", flujo:"Normal",
+    titulo:"Devolución: libro prestado",
+    desc:"Existen libros prestados → se invoca devolverLibro(), prestado cambia a false.",
+    Diagram: () => <DiagDevolver activeTrue={true} /> },
+  { id:"CP-06", uc:"UC-03", metodo:"devolverLibro()", flujo:"Alternativo",
+    titulo:"Devolución: sin libros prestados",
+    desc:"No existen libros prestados → mensaje informativo, regresa al menú sin ejecutar devolverLibro().",
+    Diagram: () => <DiagDevolver activeTrue={false} /> },
+  { id:"CP-07", uc:"UC-04", metodo:"setIsbn()", flujo:"Normal",
+    titulo:"ISBN: valor de 13 dígitos válido",
+    desc:'Condición (isbn!=null && matches("\\d{13}")) evaluada como TRUE → isbn actualizado.',
+    Diagram: () => <DiagIsbn activeTrue={true} /> },
+  { id:"CP-08", uc:"UC-04", metodo:"setIsbn()", flujo:"Alternativo",
+    titulo:"ISBN: formato inválido",
+    desc:'Condición (isbn!=null && matches("\\d{13}")) evaluada como FALSE → isbn sin cambio.',
+    Diagram: () => <DiagIsbn activeTrue={false} /> },
+  { id:"CP-09", uc:"UC-05", metodo:"setPaginas()", flujo:"Normal",
+    titulo:"Páginas: valor positivo (320)",
+    desc:"Condición numPaginas > 0 evaluada como TRUE → numPaginas actualizado a 320.",
+    Diagram: () => <DiagPaginas activeTrue={true} /> },
+  { id:"CP-10", uc:"UC-05", metodo:"setPaginas()", flujo:"Alternativo",
+    titulo:"Páginas: valor cero",
+    desc:"Condición numPaginas > 0 evaluada como FALSE (valor=0) → numPaginas sin cambio.",
+    Diagram: () => <DiagPaginas activeTrue={false} /> },
 ];
 
 // ── App ───────────────────────────────────────────────────────
 export default function App() {
-  const [selected, setSelected] = useState(0);
-  const c = CASES[selected];
-  const isNormal = c.flujo === "Normal";
+  const [sel, setSel] = useState(0);
+  const c = CASES[sel];
+  const isN = c.flujo === "Normal";
 
   return (
-    <div style={{
-      fontFamily: "'Courier New', monospace",
-      background: "#0D1B2A",
-      minHeight: "100vh",
-      color: WHITE,
-      display: "flex",
-      flexDirection: "column",
-    }}>
+    <div style={{fontFamily:"'Courier New',monospace",background:"#0D1B2A",minHeight:"100vh",color:WHITE,display:"flex",flexDirection:"column"}}>
+
       {/* Header */}
-      <div style={{
-        background: "linear-gradient(135deg, #1F4E79 0%, #0D1B2A 100%)",
-        borderBottom: "2px solid #FF69B4",
-        padding: "18px 32px 14px",
-        display: "flex",
-        alignItems: "center",
-        gap: 16,
-      }}>
-        <div style={{ fontSize: 22, fontWeight: 700, color: PINK, letterSpacing: 2 }}>
-          ◈ DECISION COVERAGE
-        </div>
-        <div style={{ fontSize: 13, color: "#8AACC8", marginTop: 2 }}>
-          Clase Libro.java — Diagramas de Flujo de Casos de Prueba
-        </div>
+      <div style={{background:"linear-gradient(135deg,#1F4E79,#0D1B2A)",borderBottom:`2px solid ${PINK}`,padding:"14px 26px 10px",display:"flex",alignItems:"center",gap:14}}>
+        <div style={{fontSize:19,fontWeight:700,color:PINK,letterSpacing:2}}>◈ DECISION COVERAGE</div>
+        <div style={{fontSize:11,color:"#8AACC8"}}>Clase Libro.java — Diagramas de Flujo</div>
       </div>
 
-      {/* Tab bar */}
-      <div style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 4,
-        padding: "10px 18px 0",
-        borderBottom: "1px solid #1F4E79",
-        background: "#111C2A",
-      }}>
-        {CASES.map((c, i) => {
-          const active = i === selected;
-          const norm = c.flujo === "Normal";
+      {/* Tabs */}
+      <div style={{display:"flex",flexWrap:"wrap",gap:3,padding:"8px 14px 0",borderBottom:"1px solid #1F4E79",background:"#111C2A"}}>
+        {CASES.map((ca,i) => {
+          const active = i===sel;
+          const nm = ca.flujo==="Normal";
           return (
-            <button key={c.id} onClick={() => setSelected(i)}
-              style={{
-                padding: "6px 14px",
-                borderRadius: "6px 6px 0 0",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 11,
-                fontFamily: "'Courier New', monospace",
-                fontWeight: active ? 700 : 400,
-                background: active ? (norm ? PINK : "#c0392b") : "#1a2a3a",
-                color: active ? WHITE : (norm ? "#FF9EC4" : "#FF8C7A"),
-                borderBottom: active ? `3px solid ${norm ? PINK_DARK : "#922B21"}` : "3px solid transparent",
-                transition: "all 0.15s",
-                letterSpacing: 0.5,
-              }}>
-              {c.id}
-            </button>
+            <button key={ca.id} onClick={()=>setSel(i)} style={{
+              padding:"5px 12px",borderRadius:"6px 6px 0 0",border:"none",cursor:"pointer",
+              fontSize:11,fontFamily:"'Courier New',monospace",fontWeight:active?700:400,
+              background:active?(nm?PINK:"#c0392b"):"#1a2a3a",
+              color:active?WHITE:(nm?"#FF9EC4":"#FF8C7A"),
+              borderBottom:active?`3px solid ${nm?PINK_DARK:"#922B21"}`:"3px solid transparent",
+              transition:"all 0.15s",
+            }}>{ca.id}</button>
           );
         })}
       </div>
 
-      {/* Main content */}
-      <div style={{
-        display: "flex",
-        flex: 1,
-        padding: "24px 28px",
-        gap: 28,
-        flexWrap: "wrap",
-      }}>
+      {/* Main */}
+      <div style={{display:"flex",flex:1,padding:"18px 22px",gap:22,flexWrap:"wrap"}}>
 
-        {/* Left: info panel */}
-        <div style={{
-          flex: "0 0 310px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
-        }}>
-          {/* Case header card */}
-          <div style={{
-            background: isNormal
-              ? "linear-gradient(135deg, #1a4a2e 0%, #0D2818 100%)"
-              : "linear-gradient(135deg, #4a1a1a 0%, #2a0a0a 100%)",
-            border: `2px solid ${isNormal ? "#27AE60" : RED}`,
-            borderRadius: 10,
-            padding: "16px 18px",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <span style={{ fontSize: 22, fontWeight: 700, color: PINK, letterSpacing: 1 }}>{c.id}</span>
-              <span style={{
-                fontSize: 11, fontWeight: 700, padding: "3px 12px", borderRadius: 20,
-                background: isNormal ? GREEN : RED, color: WHITE,
-              }}>{c.flujo}</span>
+        {/* Left panel */}
+        <div style={{flex:"0 0 272px",display:"flex",flexDirection:"column",gap:11}}>
+
+          {/* Card */}
+          <div style={{background:isN?"linear-gradient(135deg,#1a4a2e,#0D2818)":"linear-gradient(135deg,#4a1a1a,#2a0a0a)",border:`2px solid ${isN?GREEN:RED}`,borderRadius:10,padding:"13px 15px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
+              <span style={{fontSize:19,fontWeight:700,color:PINK}}>{c.id}</span>
+              <span style={{fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,background:isN?GREEN:RED,color:WHITE}}>{c.flujo}</span>
             </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: WHITE, marginBottom: 6 }}>{c.titulo}</div>
-            <div style={{ fontSize: 11, color: "#8AACC8", marginBottom: 10 }}>
-              {c.uc} &nbsp;·&nbsp; <span style={{ color: PINK }}>{c.metodo}</span>
-            </div>
-            <div style={{ fontSize: 11, color: "#CBD5E0", lineHeight: 1.6 }}>{c.desc}</div>
+            <div style={{fontSize:12,fontWeight:700,color:WHITE,marginBottom:4}}>{c.titulo}</div>
+            <div style={{fontSize:10,color:"#8AACC8",marginBottom:7}}>{c.uc} · <span style={{color:PINK}}>{c.metodo}</span></div>
+            <div style={{fontSize:10,color:"#CBD5E0",lineHeight:1.65}}>{c.desc}</div>
           </div>
 
           {/* Legend */}
-          <div style={{
-            background: "#111C2A",
-            border: "1px solid #1F4E79",
-            borderRadius: 10,
-            padding: "14px 18px",
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#8AACC8", marginBottom: 10, letterSpacing: 1 }}>
-              LEYENDA
-            </div>
+          <div style={{background:"#111C2A",border:"1px solid #1F4E79",borderRadius:10,padding:"11px 14px"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#8AACC8",marginBottom:7,letterSpacing:1}}>LEYENDA</div>
             {[
-              { color: PINK, label: "Flujo activo (camino recorrido)" },
-              { color: GRAY_LIGHT, label: "Nodo inactivo", border: NAVY },
-              { color: GRAY, label: "Arista inactiva" },
-            ].map((l, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 7 }}>
-                <div style={{
-                  width: 18, height: 18, borderRadius: 4,
-                  background: l.color,
-                  border: `2px solid ${l.border || PINK_DARK}`,
-                  flexShrink: 0,
-                }} />
-                <span style={{ fontSize: 11, color: "#CBD5E0" }}>{l.label}</span>
+              {color:PINK,   border:PINK_DARK, label:"Flujo evaluado (activo)"},
+              {color:GRAY_NODE,border:NAVY,    label:"Nodo no recorrido"},
+            ].map((l,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                <div style={{width:15,height:15,borderRadius:3,background:l.color,border:`2px solid ${l.border}`,flexShrink:0}} />
+                <span style={{fontSize:10,color:"#CBD5E0"}}>{l.label}</span>
               </div>
             ))}
-          </div>
-
-          {/* Decision outcome */}
-          <div style={{
-            background: "#111C2A",
-            border: `1px solid ${isNormal ? GREEN : RED}`,
-            borderRadius: 10,
-            padding: "14px 18px",
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#8AACC8", marginBottom: 8, letterSpacing: 1 }}>
-              DECISIÓN EVALUADA
-            </div>
-            <div style={{
-              fontSize: 13,
-              color: isNormal ? "#6FCF97" : "#FF8C7A",
-              fontWeight: 700,
-              marginBottom: 4,
-            }}>
-              {isNormal ? "✓  Condición = TRUE" : "✗  Condición = FALSE"}
-            </div>
-            <div style={{ fontSize: 11, color: "#8AACC8" }}>
-              Tipo de prueba: <span style={{ color: YELLOW }}>Decision Coverage</span>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+              <div style={{width:20,height:3,background:GRAY_EDGE,borderRadius:2,flexShrink:0}} />
+              <span style={{fontSize:10,color:"#CBD5E0"}}>Arista no recorrida</span>
             </div>
           </div>
 
-          {/* All cases mini list */}
-          <div style={{
-            background: "#111C2A",
-            border: "1px solid #1F4E79",
-            borderRadius: 10,
-            padding: "14px 18px",
-            flex: 1,
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#8AACC8", marginBottom: 10, letterSpacing: 1 }}>
-              TODOS LOS CASOS
+          {/* Decision */}
+          <div style={{background:"#111C2A",border:`1px solid ${isN?GREEN:RED}`,borderRadius:10,padding:"11px 14px"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#8AACC8",marginBottom:6,letterSpacing:1}}>DECISIÓN EVALUADA</div>
+            <div style={{fontSize:12,fontWeight:700,color:isN?"#6FCF97":"#FF8C7A",marginBottom:3}}>
+              {isN?"✓  Condición = TRUE":"✗  Condición = FALSE"}
             </div>
-            {CASES.map((ca, i) => (
-              <div key={ca.id}
-                onClick={() => setSelected(i)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  padding: "5px 8px", borderRadius: 6, cursor: "pointer",
-                  background: i === selected ? "#1F4E79" : "transparent",
-                  marginBottom: 2,
-                  transition: "background 0.15s",
-                }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: PINK, minWidth: 42 }}>{ca.id}</span>
-                <span style={{ fontSize: 10, color: "#8AACC8", flex: 1 }}>{ca.metodo}</span>
-                <span style={{
-                  fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8,
-                  background: ca.flujo === "Normal" ? "#27AE60" : RED,
-                  color: WHITE,
-                }}>{ca.flujo === "Normal" ? "N" : "A"}</span>
+            <div style={{fontSize:10,color:"#8AACC8"}}>
+              Tipo: <span style={{color:YELLOW}}>Decision Coverage</span>
+            </div>
+          </div>
+
+          {/* Case list */}
+          <div style={{background:"#111C2A",border:"1px solid #1F4E79",borderRadius:10,padding:"11px 14px",flex:1}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#8AACC8",marginBottom:7,letterSpacing:1}}>TODOS LOS CASOS</div>
+            {CASES.map((ca,i)=>(
+              <div key={ca.id} onClick={()=>setSel(i)} style={{
+                display:"flex",alignItems:"center",gap:7,padding:"4px 6px",borderRadius:5,
+                cursor:"pointer",background:i===sel?"#1F4E79":"transparent",marginBottom:2,transition:"background 0.15s",
+              }}>
+                <span style={{fontSize:10,fontWeight:700,color:PINK,minWidth:36}}>{ca.id}</span>
+                <span style={{fontSize:9,color:"#8AACC8",flex:1}}>{ca.metodo}</span>
+                <span style={{fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:8,background:ca.flujo==="Normal"?GREEN:RED,color:WHITE}}>
+                  {ca.flujo==="Normal"?"N":"A"}
+                </span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Right: diagram */}
-        <div style={{
-          flex: 1,
-          minWidth: 300,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "flex-start",
-          gap: 16,
-        }}>
-          <div style={{
-            fontSize: 12, fontWeight: 700, color: "#8AACC8",
-            letterSpacing: 2, alignSelf: "flex-start",
-          }}>
+        {/* Diagram */}
+        <div style={{flex:1,minWidth:340,display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#8AACC8",letterSpacing:2,alignSelf:"flex-start"}}>
             DIAGRAMA DE FLUJO — {c.id}
           </div>
 
           <div style={{
-            background: "#F8FAFC",
-            borderRadius: 14,
-            border: `3px solid ${isNormal ? GREEN : RED}`,
-            padding: "30px 20px",
-            boxShadow: `0 0 40px ${isNormal ? "rgba(39,174,96,0.2)" : "rgba(231,76,60,0.2)"}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: 360,
-            width: "100%",
-            maxWidth: 480,
+            background:BG_DIAG,borderRadius:14,
+            border:`3px solid ${isN?GREEN:RED}`,
+            padding:"24px 20px",
+            boxShadow:`0 0 48px ${isN?"rgba(39,174,96,0.18)":"rgba(231,76,60,0.18)"}`,
+            display:"flex",alignItems:"flex-start",justifyContent:"center",
+            width:"100%",overflowX:"auto",
           }}>
             <c.Diagram />
           </div>
 
-          {/* Color explanation */}
-          <div style={{
-            background: "#111C2A",
-            border: "1px solid #1F4E79",
-            borderRadius: 10,
-            padding: "12px 18px",
-            fontSize: 11,
-            color: "#8AACC8",
-            lineHeight: 1.7,
-            maxWidth: 480,
-            width: "100%",
-          }}>
-            <span style={{ color: PINK, fontWeight: 700 }}>★ Flujo resaltado en rosa:</span>{" "}
-            todos los nodos y aristas de color <span style={{ color: PINK }}>rosa/magenta</span> representan
-            el camino que se recorre durante la ejecución del caso de prueba <strong style={{ color: WHITE }}>{c.id}</strong>.{" "}
-            Los nodos en <span style={{ color: GRAY }}>gris</span> son ramas que <em>no</em> se ejecutan en este escenario.
+          <div style={{background:"#111C2A",border:"1px solid #1F4E79",borderRadius:10,padding:"10px 15px",fontSize:10,color:"#8AACC8",lineHeight:1.7,width:"100%"}}>
+            <span style={{color:PINK,fontWeight:700}}>★ Flujo resaltado en rosa:</span>{" "}
+            nodos y aristas de color rosa representan el camino recorrido en <strong style={{color:WHITE}}>{c.id}</strong>.{" "}
+            Las ramas en <span style={{color:GRAY_NODE,fontWeight:700}}>gris</span> muestran los caminos alternativos del punto de decisión que <em>no</em> se ejecutan en este caso, pero que son parte del método.
           </div>
         </div>
       </div>
